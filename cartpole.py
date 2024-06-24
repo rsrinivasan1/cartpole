@@ -3,7 +3,7 @@ import numpy as np
 import time
 import torch
 import torch.nn as nn
-from torch.utils import tensorboard
+# from torch.utils import tensorboard
 
 
 class Actor(nn.Module):
@@ -13,11 +13,9 @@ class Actor(nn.Module):
             # state dimension is 4 for the following:
             # cart pos, cart velocity, pole angle, pole angular velocity
             nn.Linear(4, 128),
-            nn.Mish(),
+            nn.LeakyReLU(),
             nn.Linear(128, 128),
-            nn.Mish(),
-            nn.Linear(128, 128),
-            nn.Mish(),
+            nn.LeakyReLU(),
             nn.Linear(128, 2),
             # softmax to convert to probabilities of going left/right
             nn.Softmax()
@@ -32,11 +30,9 @@ class Critic(nn.Module):
         super().__init__()
         self.model = nn.Sequential(
             nn.Linear(4, 128),
-            nn.Mish(),
+            nn.LeakyReLU(),
             nn.Linear(128, 128),
-            nn.Mish(),
-            nn.Linear(128, 128),
-            nn.Mish(),
+            nn.LeakyReLU(),
             # output is 1 because we want to predict the reward for being in a state
             nn.Linear(128, 1)
         )
@@ -62,7 +58,8 @@ def policy_loss(old_log_prob, log_prob, adv):
     return -likelihood
 
 
-env = gym.make('CartPole-v1', render_mode="human")
+env = gym.make('CartPole-v1', render_mode="human", max_episode_steps=1000)
+# writer = tensorboard.SummaryWriter()
 
 for i in range(10000):
     prev_policy_action_probability = None
@@ -70,7 +67,7 @@ for i in range(10000):
     done = False
     total_reward = 0
 
-    while True:
+    while not done:
         # Sample action from policy network
         distribution = torch.distributions.Categorical(actor(torch.from_numpy(state)))
         action = distribution.sample()
@@ -78,11 +75,14 @@ for i in range(10000):
 
         next_state, reward, done, info, _ = env.step(action.numpy())
         total_reward += reward
-        if done:
-            break
+
         # Calculate discounted reward estimated based on critic network
         # Here we only perform one timestep before updating reward -> TD(0) algorithm
-        discounted_rewards = reward + gamma * critic(torch.from_numpy(next_state))
+
+        if done:  # we know that there are no more rewards, and we want to learn from this step
+            discounted_rewards = reward
+        else:
+            discounted_rewards = reward + gamma * critic(torch.from_numpy(next_state))
         # Calculate advantage
         baseline_rewards = critic(torch.from_numpy(state))
         advantage = discounted_rewards - baseline_rewards
