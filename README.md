@@ -2,11 +2,11 @@
 
 This github repo aims to document my progress learning proximal policy optimization. Thus far, I have attempted to solve PPO on the cartpole environment, using this page as a source of inspiration and guidance: https://medium.com/deeplearningmadeeasy/simple-ppo-implementation-e398ca0f2e7c
 
-## Very initial attempt:
+## Very initial attempt with smaller network:
 
 https://github.com/rsrinivasan1/cartpole/assets/52140136/d8290b21-8e20-4679-a09f-d336e929456f
 
-## Second attempt:
+## Second attempt with larger network:
 
 https://github.com/rsrinivasan1/cartpole/assets/52140136/8223d410-99c7-4d61-98c8-b7a4951599b5
 
