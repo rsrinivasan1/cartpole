@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from memory import PPOMemory
 from network import Actor, Critic
+from config import batch_size, learning_rate, n_epochs, gamma, gae_lambda, c_1, eps, N, n_games
 
 
 def calculate_actor_loss(old_log_probs, log_probs, adv_batch):
@@ -13,18 +14,20 @@ def calculate_actor_loss(old_log_probs, log_probs, adv_batch):
     loss = torch.min(ratio * adv_batch, clipped).mean()
     return -loss
 
-# takes in numpy array of state, returns output of actor and critic
-def choose_action(state):
-    state = torch.tensor(state, dtype=torch.float).to(device).unsqueeze(0)
-    distribution = actor(state)
-    value = critic(state)
-    action = distribution.sample()
+# takes in numpy array of states in env, returns output of actor and critic
+def choose_actions(states):
+    states = torch.tensor(states, dtype=torch.float).to(device)
+    distributions = actor(states)
+    values = critic(states)
 
-    prob_action = distribution.log_prob(action).item()
-    action = action.item()
-    value = value.item()
+    actions = distributions.sample()
+    prob_actions = distributions.log_prob(actions)
 
-    return action, prob_action, value
+    actions = actions.tolist()
+    prob_actions = prob_actions.tolist()
+    values = values.squeeze(-1).tolist()
+
+    return actions, prob_actions, values
 
 def step(actor_optim, critic_optim, loss):
     actor_optim.zero_grad()
@@ -80,7 +83,6 @@ def learn(lr):
             returns = advantage[batch] + values[batch]
             critic_loss = (returns - critic_value).pow(2).mean()
 
-            c_1 = 0.5
             total_loss = actor_loss + c_1 * critic_loss
 
             step(actor_optim, critic_optim, total_loss)
@@ -91,26 +93,17 @@ def make_env(gym_id):
     def thunk():
         return gym.make(gym_id)
     return thunk
+    
 
-
-# configuration
-gamma = 0.99
-eps = 0.2
-learning_rate = 0.0003
-gae_lambda = 0.95
-batch_size = 5
-N = 20
-n_epochs = 4
-n_games = 300
-
+envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-actor = Actor(device, 4, 128, 128, 2)
-critic = Critic(device, 4, 128, 128)
+actor = Actor(device, np.array(envs.single_observation_space.shape).prod(), 128, 128, envs.single_action_space.n)
+critic = Critic(device, np.array(envs.single_observation_space.shape).prod(), 128, 128)
+
 actor_optim = torch.optim.Adam(actor.parameters(), lr=learning_rate, eps=1e-5)
 critic_optim = torch.optim.Adam(critic.parameters(), lr=learning_rate, eps=1e-5)
-
 memory = PPOMemory(batch_size)
-envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
+
 
 def run(anneal_lr=True):
     best_score = envs.reward_range[0]
@@ -119,17 +112,17 @@ def run(anneal_lr=True):
 
     # want to learn every N games
     for i in range(n_games):
-        state = envs.reset()[0][0]
+        states = envs.reset()[0]
         done = False
         score = 0
         lr = learning_rate
         while not done:
-            action, prob, val = choose_action(state)
-            next_state, reward, done, _, _ = envs.step([action])
+            actions, probs, vals = choose_actions(states)
+            next_states, rewards, dones, _, _ = envs.step(actions)
             num_steps += 1
-            score += reward[0]
+            score += rewards[0]
             # store this observation
-            memory.store_memory(state, action, prob, val, reward[0], done[0])
+            memory.store_memory(states[0], actions[0], probs[0], vals[0], rewards[0], dones[0])
 
             if num_steps % N == 0:
                 # anneal learning rate if specified
@@ -138,7 +131,9 @@ def run(anneal_lr=True):
                     lr = learning_rate * frac
                 # actually backpropagate
                 learn(lr)
-            state = next_state[0]
+            states = np.expand_dims(next_states[0], axis=0)
+            done = dones[0]
+            
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
