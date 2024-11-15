@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from memory import PPOMemory
 from network import Actor, Critic
-from config import batch_size, learning_rate, n_epochs, gamma, gae_lambda, c_1, eps, N, n_games
+from config import batch_size, learning_rate, n_epochs, gamma, gae_lambda, c_1, eps, N, n_games, layer_dims_actor, layer_dims_critic
 
 
 def calculate_actor_loss(old_log_probs, log_probs, adv_batch):
@@ -14,8 +14,9 @@ def calculate_actor_loss(old_log_probs, log_probs, adv_batch):
     loss = torch.min(ratio * adv_batch, clipped).mean()
     return -loss
 
+
 # takes in numpy array of states in env, returns output of actor and critic
-def choose_actions(states):
+def choose_actions(states, actor, critic):
     states = torch.tensor(states, dtype=torch.float).to(device)
     distributions = actor(states)
     values = critic(states)
@@ -29,6 +30,7 @@ def choose_actions(states):
 
     return actions, prob_actions, values
 
+
 def step(actor_optim, critic_optim, loss):
     actor_optim.zero_grad()
     critic_optim.zero_grad()
@@ -36,8 +38,9 @@ def step(actor_optim, critic_optim, loss):
     actor_optim.step()
     critic_optim.step()
 
+
 # assumes you have N observations in memory, for each batch makes a step
-def learn(lr):
+def learn(actor, critic, actor_optim, critic_optim, memory, lr):
     # update lr for both optimizers:
     actor_optim.param_groups[0]['lr'] = lr
     critic_optim.param_groups[0]['lr'] = lr
@@ -89,23 +92,14 @@ def learn(lr):
 
     memory.clear_memory()
 
+
 def make_env(gym_id):
     def thunk():
         return gym.make(gym_id)
     return thunk
-    
-
-envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-actor = Actor(device, np.array(envs.single_observation_space.shape).prod(), 128, 128, envs.single_action_space.n)
-critic = Critic(device, np.array(envs.single_observation_space.shape).prod(), 128, 128)
-
-actor_optim = torch.optim.Adam(actor.parameters(), lr=learning_rate, eps=1e-5)
-critic_optim = torch.optim.Adam(critic.parameters(), lr=learning_rate, eps=1e-5)
-memory = PPOMemory(batch_size)
 
 
-def run(anneal_lr=True):
+def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_lr=True):
     best_score = envs.reward_range[0]
     prev_scores = []
     num_steps = 0
@@ -117,7 +111,7 @@ def run(anneal_lr=True):
         score = 0
         lr = learning_rate
         while not done:
-            actions, probs, vals = choose_actions(states)
+            actions, probs, vals = choose_actions(states, actor, critic)
             next_states, rewards, dones, _, _ = envs.step(actions)
             num_steps += 1
             score += rewards[0]
@@ -130,7 +124,7 @@ def run(anneal_lr=True):
                     frac = 1 - (i / n_games)
                     lr = learning_rate * frac
                 # actually backpropagate
-                learn(lr)
+                learn(actor, critic, actor_optim, critic_optim, memory, lr)
             states = np.expand_dims(next_states[0], axis=0)
             done = dones[0]
             
@@ -144,4 +138,15 @@ def run(anneal_lr=True):
 
 
 if __name__ == "__main__":
-    run()
+    envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    actor = Actor(device, np.array(envs.single_observation_space.shape).prod(), layer_dims_actor, envs.single_action_space.n)
+    critic = Critic(device, np.array(envs.single_observation_space.shape).prod(), layer_dims_critic)
+
+    actor_optim = torch.optim.Adam(actor.parameters(), lr=learning_rate, eps=1e-5)
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=learning_rate, eps=1e-5)
+
+    memory = PPOMemory(batch_size)
+
+    run(envs, actor, critic, actor_optim, critic_optim, memory, device)
