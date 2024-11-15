@@ -3,13 +3,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from memory import PPOMemory
-from actor import Actor
-from critic import Critic
+from network import Actor, Critic
 
-
-# interface to store info from step taken
-def remember(state, action, probs, vals, reward, done):
-    memory.store_memory(state, action, probs, vals, reward, done)
 
 def calculate_actor_loss(old_log_probs, log_probs, adv_batch):
     ratio = (log_probs - old_log_probs).exp()
@@ -39,7 +34,11 @@ def step(actor_optim, critic_optim, loss):
     critic_optim.step()
 
 # assumes you have N observations in memory, for each batch makes a step
-def learn():
+def learn(lr):
+    # update lr for both optimizers:
+    actor_optim.param_groups[0]['lr'] = lr
+    critic_optim.param_groups[0]['lr'] = lr
+    
     for _ in range(n_epochs):
         # create batches from stored memory
         # numpy arrays
@@ -88,32 +87,32 @@ def learn():
 
     memory.clear_memory()
 
+def make_env(gym_id):
+    def thunk():
+        return gym.make(gym_id)
+    return thunk
+
 
 # configuration
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-actor = Actor(device, 4, 256, 256, 2)
-critic = Critic(device, 4, 256, 256)
-actor_optim = torch.optim.Adam(actor.parameters(), lr=0.0003)
-critic_optim = torch.optim.Adam(critic.parameters(), lr=0.0003)
-
 gamma = 0.99
 eps = 0.2
+learning_rate = 0.0003
 gae_lambda = 0.95
 batch_size = 5
 N = 20
 n_epochs = 4
 n_games = 300
 
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+actor = Actor(device, 4, 128, 128, 2)
+critic = Critic(device, 4, 128, 128)
+actor_optim = torch.optim.Adam(actor.parameters(), lr=learning_rate, eps=1e-5)
+critic_optim = torch.optim.Adam(critic.parameters(), lr=learning_rate, eps=1e-5)
+
 memory = PPOMemory(batch_size)
-
-def make_env(gym_id):
-    def thunk():
-        return gym.make(gym_id)
-    return thunk
-
 envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
 
-def run():
+def run(anneal_lr=True):
     best_score = envs.reward_range[0]
     prev_scores = []
     num_steps = 0
@@ -123,21 +122,27 @@ def run():
         state = envs.reset()[0][0]
         done = False
         score = 0
+        lr = learning_rate
         while not done:
             action, prob, val = choose_action(state)
             next_state, reward, done, _, _ = envs.step([action])
             num_steps += 1
             score += reward[0]
             # store this observation
-            remember(state, action, prob, val, reward[0], done[0])
+            memory.store_memory(state, action, prob, val, reward[0], done[0])
+
             if num_steps % N == 0:
+                # anneal learning rate if specified
+                if anneal_lr:
+                    frac = 1 - (i / n_games)
+                    lr = learning_rate * frac
                 # actually backpropagate
-                learn()
+                learn(lr)
             state = next_state[0]
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
-        print(f"Episode {i}, score: {score}, mean score: {mean_score}")
+        print(f"Episode {i}, lr: {round(lr, 5)}, score: {score}, mean score: {mean_score}")
         if mean_score > best_score:
             best_score = mean_score
             print(f"Best average score over 100 trials: {best_score}")
