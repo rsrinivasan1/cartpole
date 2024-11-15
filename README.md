@@ -24,3 +24,9 @@ This time, I found some resources online to help me implement PPO memory, and re
 I'm happy with my progress here, and am ready to move on to other projects. Here's the output from one of the better runs:
 
 <img width="341" alt="Screenshot 2024-11-14 at 11 24 56 PM" src="https://github.com/user-attachments/assets/e353f917-836e-4a8b-a869-65da9f8269a7">
+
+## New update!!
+
+I made some further small optimizations, like using an annealed learning rate and changing the Adams optimizer epsilon value, which greatly stabilizes my algorithm. With this, I was able to get a score of 36000 on one of the runs:
+
+<img width="427" alt="best" src="https://github.com/user-attachments/assets/b2418d77-8b27-4069-9971-7db4f28bfcec">
