@@ -97,6 +97,7 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
     best_score = envs.reward_range[0]
     prev_scores = []
     num_steps = 0
+    learning_steps = 0
 
     # want to learn every N games
     for i in range(n_games):
@@ -107,6 +108,7 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
         while not done:
             actions, probs, vals = choose_actions(states, actor, critic)
             next_states, rewards, dones, _, _ = envs.step(actions)
+            # print(next_states, rewards, dones)
             num_steps += 1
             # average score over all envs
             score += rewards.mean()
@@ -120,13 +122,14 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
                     lr = learning_rate * frac
                 # actually backpropagate
                 learn(actor, critic, actor_optim, critic_optim, memory, lr)
+                learning_steps += 1
             states = next_states
             done = all(dones)
             
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
-        print(f"Episode {i}, lr: {round(lr, 5)}, score: {score}, mean score: {mean_score}")
+        print(f"Episode {i}, lr: {round(lr, 5)}, learning steps: {learning_steps}, score: {score}, mean score: {mean_score}")
         if mean_score > best_score:
             best_score = mean_score
             print(f"Best average score over 100 trials: {best_score}")
@@ -150,6 +153,6 @@ if __name__ == "__main__":
     actor_optim = torch.optim.Adam(actor.parameters(), lr=learning_rate, eps=1e-5)
     critic_optim = torch.optim.Adam(critic.parameters(), lr=learning_rate, eps=1e-5)
 
-    memory = PPOMemory(batch_size, 1)
+    memory = PPOMemory(batch_size, n_envs)
 
     run(envs, actor, critic, actor_optim, critic_optim, memory, device)
