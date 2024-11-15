@@ -48,7 +48,7 @@ def learn(actor, critic, actor_optim, critic_optim, memory, lr):
     for i in range(n_epochs):
         # create batches from stored memory
         # numpy arrays
-        states_arr, actions_arr, old_probs_arr, values_arr, rewards_arr, dones_arr, batches = memory.generate_batches()
+        states_arr, actions_arr, old_probs_arr, values_arr, rewards_arr, dones_arr, batches = memory.generate_batches(n_states=N)
         for j in range(n_envs):
             # calculate advantage for each env, for every state in memory
             advantage = np.zeros_like(rewards_arr[j])
@@ -97,7 +97,6 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
     best_score = envs.reward_range[0]
     prev_scores = []
     num_steps = 0
-    learning_steps = 0
 
     # want to learn every N games
     for i in range(n_games):
@@ -122,14 +121,13 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
                     lr = learning_rate * frac
                 # actually backpropagate
                 learn(actor, critic, actor_optim, critic_optim, memory, lr)
-                learning_steps += 1
             states = next_states
             done = all(dones)
             
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
-        print(f"Episode {i}, lr: {round(lr, 5)}, learning steps: {learning_steps}, score: {score}, mean score: {mean_score}")
+        print(f"Episode {i}, lr: {round(lr, 5)}, score: {score}, mean score: {mean_score}")
         if mean_score > best_score:
             best_score = mean_score
             print(f"Best average score over 100 trials: {best_score}")

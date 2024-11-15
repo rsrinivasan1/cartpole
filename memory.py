@@ -12,8 +12,7 @@ class PPOMemory:
         self.batch_size = batch_size
         self.n_envs = n_envs
     
-    def generate_batches(self):
-        n_states = len(self.states)
+    def generate_batches(self, n_states):
         # stores starting indices (0, batch_size, batch_size * 2, batch_size * 3, ...)
         batch_start = np.arange(0, n_states, self.batch_size)
         indices = np.arange(n_states, dtype=np.int64)
