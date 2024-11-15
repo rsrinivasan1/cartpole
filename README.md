@@ -15,4 +15,12 @@ This project is still a work in progress for me, and I will be gradually updatin
 - With a larger network (2nd attempt) and the LeakyReLU activation function, the model actually learns to balance, yet the cart tends to still move gradually in one direction. I think modifying the reward function to incentivize the cart to stay near the center might be important - I'll try this next!
 - I think the termination step of each episode is actually very important for the model to learn. Getting a singular reward with no predicted further rewards (because the episode has ended) influences the model to make changes and prevent the episode from ending
 
-I'm planning on continuing this problem on this environment until the model is consistently able to score 195 over 100 consecutive episodes, then move on to bigger and better things!
+I'm planning on continuing this problem on this environment until the model is consistently able to score an average of 195 over 100 consecutive episodes, then move on to bigger and better things!
+
+## Third and final attempt with even larger network, and batched update using recent memory:
+
+This time, I found some resources online to help me implement PPO memory, and reimplemented the code using advantage values gathered from sequential states in this memory. This version finally passes the benchmark that I wanted to achieve, getting a score of 195 over 100 consecutive episodes relatively consistently. 
+
+I'm happy with my progress here, and am ready to move on to other projects. Here's the output from one of the better runs:
+
+<img width="341" alt="Screenshot 2024-11-14 at 11 24 56 PM" src="https://github.com/user-attachments/assets/e353f917-836e-4a8b-a869-65da9f8269a7">
