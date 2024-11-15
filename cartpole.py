@@ -38,6 +38,7 @@ def step(actor_optim, critic_optim, loss):
     actor_optim.step()
     critic_optim.step()
 
+# assumes you have N observations in memory, for each batch makes a step
 def learn():
     for _ in range(n_epochs):
         # create batches from stored memory
@@ -105,31 +106,34 @@ n_games = 300
 
 memory = PPOMemory(batch_size)
 
-env = gym.make('CartPole-v1')
+def make_env(gym_id):
+    def thunk():
+        return gym.make(gym_id)
+    return thunk
 
+envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
 
 def run():
-    best_score = env.reward_range[0]
+    best_score = envs.reward_range[0]
     prev_scores = []
     num_steps = 0
 
     # want to learn every N games
     for i in range(n_games):
-        state = env.reset()[0]
+        state = envs.reset()[0][0]
         done = False
         score = 0
         while not done:
             action, prob, val = choose_action(state)
-            next_state, reward, done, _, _ = env.step(action)
+            next_state, reward, done, _, _ = envs.step([action])
             num_steps += 1
-            score += reward
+            score += reward[0]
             # store this observation
-            remember(state, action, prob, val, reward, done)
+            remember(state, action, prob, val, reward[0], done[0])
             if num_steps % N == 0:
                 # actually backpropagate
                 learn()
-
-            state = next_state
+            state = next_state[0]
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
