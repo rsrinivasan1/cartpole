@@ -1,4 +1,5 @@
 import gym
+import time
 import numpy as np
 import torch
 import torch.nn as nn
@@ -46,8 +47,7 @@ def learn(actor, critic, actor_optim, critic_optim, memory, lr):
     critic_optim.param_groups[0]['lr'] = lr
     
     for i in range(n_epochs):
-        # create batches from stored memory
-        # numpy arrays
+        # create batches from stored memory, shuffled each epoch
         states_arr, actions_arr, old_probs_arr, values_arr, rewards_arr, dones_arr, batches = memory.generate_batches(n_states=N)
         for j in range(n_envs):
             # calculate advantage for each env, for every state in memory
@@ -102,15 +102,14 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
     for i in range(n_games):
         states = envs.reset()[0]
         done = False
-        score = 0
+        scores = np.zeros(n_envs)
         lr = learning_rate
         while not done:
             actions, probs, vals = choose_actions(states, actor, critic)
             next_states, rewards, dones, _, _ = envs.step(actions)
-            # print(next_states, rewards, dones)
             num_steps += 1
             # average score over all envs
-            score += rewards.mean()
+            scores += rewards
             # store this observation
             memory.store_memory(states, actions, probs, vals, rewards, dones)
 
@@ -122,8 +121,9 @@ def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_l
                 # actually backpropagate
                 learn(actor, critic, actor_optim, critic_optim, memory, lr)
             states = next_states
-            done = all(dones)
+            done = any(dones)
             
+        score = np.mean(scores)
         prev_scores.append(score)
         mean_score = np.mean(prev_scores[-100:])
 
@@ -142,7 +142,7 @@ def make_env(gym_id):
 
 
 if __name__ == "__main__":
-    envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1')])
+    envs = gym.vector.SyncVectorEnv([make_env('CartPole-v1') for _ in range(n_envs)])
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     actor = Actor(device, np.array(envs.single_observation_space.shape).prod(), layer_dims_actor, envs.single_action_space.n)
@@ -153,4 +153,6 @@ if __name__ == "__main__":
 
     memory = PPOMemory(batch_size, n_envs)
 
+    start = time.time()
     run(envs, actor, critic, actor_optim, critic_optim, memory, device)
+    print(f"Training took {time.time() - start} seconds")
