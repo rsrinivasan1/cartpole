@@ -1,4 +1,4 @@
-import gym
+import gymnasium as gym
 import time
 import numpy as np
 import torch
@@ -94,7 +94,7 @@ def learn(actor, critic, actor_optim, critic_optim, memory, lr):
 
 
 def run(envs, actor, critic, actor_optim, critic_optim, memory, device, anneal_lr=True):
-    best_score = envs.reward_range[0]
+    best_score = -float('inf')
     prev_scores = []
     num_steps = 0
 
