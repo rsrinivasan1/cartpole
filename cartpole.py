@@ -58,9 +58,7 @@ def learn(actor, critic, actor_optim, critic_optim, memory, lr):
             advantage[-1] = deltas[-1]  # last step advantage is just delta
             for t in reversed(range(len(deltas) - 1)):
                 advantage[t] = deltas[t] + gamma * gae_lambda * (1 - dones_arr[j][t]) * advantage[t + 1]
-            
-            advantage = (advantage - np.mean(advantage)) / (np.std(advantage) + 1e-8)
-            
+                        
             advantage = torch.tensor(advantage).to(device)
             values = torch.tensor(values_arr[j]).to(device)
 
