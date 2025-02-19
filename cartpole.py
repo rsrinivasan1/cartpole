@@ -52,21 +52,15 @@ def learn(actor, critic, actor_optim, critic_optim, memory, lr):
         for j in range(n_envs):
             # calculate advantage for each env, for every state in memory
             advantage = np.zeros_like(rewards_arr[j])
-            # get each A_t BEFORE using shuffled batches, so that continuity of states is not broken
-            for t in range(len(rewards_arr[j]) - 1):
-                discount = 1
-                a_t = 0
-                for k in range(t, len(rewards_arr[j]) - 1):
-                    # discount = (gamma * gae_lambda) ^ (k - t)
-                    # A_t = sum of discount * (r_t + gamma * V(s_t+1) * (1 - done_t))
-                    # no more extra rewards if done, just discount * rewards_arr[k] - values[k]
-                    a_t += discount * (rewards_arr[j][k] + gamma * values_arr[j][k + 1] * (1 - int(dones_arr[j][k])) - values_arr[j][k])
-                    discount *= gamma * gae_lambda
-                    if dones_arr[j][k]:
-                        # reset discount to 1 if episode ends
-                        discount = 1
-                advantage[t] = a_t
-
+            deltas = rewards_arr[j][:-1] + gamma * values_arr[j][1:] * (1 - dones_arr[j][:-1]) - values_arr[j][:-1]
+            
+            # compute GAE in a vectorized O(n) manner
+            advantage[-1] = deltas[-1]  # last step advantage is just delta
+            for t in reversed(range(len(deltas) - 1)):
+                advantage[t] = deltas[t] + gamma * gae_lambda * (1 - dones_arr[j][t]) * advantage[t + 1]
+            
+            advantage = (advantage - np.mean(advantage)) / (np.std(advantage) + 1e-8)
+            
             advantage = torch.tensor(advantage).to(device)
             values = torch.tensor(values_arr[j]).to(device)
 
